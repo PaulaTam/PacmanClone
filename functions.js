@@ -16,15 +16,7 @@ const keys = {
     }
 };
 
-/*const arrow = {
-    up: 38,
-    left: 37,
-    down: 40,
-    right: 39
-}*/
-
 let lastKey = '';
-
 let score = 0;
 
 //event listeners
@@ -128,8 +120,29 @@ function collisionForLoopY({ x, y }) { //for up and down collisions
     }
 }
 
+function collisionCircle ({ circle, player }) {
+    return Math.hypot(
+        circle.position.x - player.position.x,
+        circle.position.y - player.position.y
+    ) < circle.radius + player.radius;
+}
+
+function collisionGhostWall ({ array, dir, ghost, x, y, boundary }) {
+    return (!array.includes(dir) &&
+    collisionBoundary ({
+    circle: {...ghost,
+            velocity: {
+                x: x,
+                y: y
+            }},
+    rectangle: boundary
+    }))
+}
+
+let frameId;
+
 export function animate() {
-    requestAnimationFrame(animate);
+    frameId = requestAnimationFrame(animate);
     c.clearRect(0, 0, canvas.width, canvas.height);
 
     for (let i = pellets.length - 1; 0 <= i; i--) {
@@ -138,10 +151,10 @@ export function animate() {
 
         //pellet collision
         if (
-            Math.hypot(
-                pellet.position.x - player.position.x,
-                pellet.position.y - player.position.y
-            ) < pellet.radius + player.radius
+            collisionCircle({
+                circle: pellet,
+                player: player
+            })
         ) {
             pellets.splice(i, 1); //remove pellets from array with splice
             
@@ -149,11 +162,23 @@ export function animate() {
                 score += 10;
             } else if (pellet.constructor.name === "SuperPellet") { // if class of object is SuperPellet
                 score += 15;
-                console.log("super");
+                
+                ghosts.forEach((ghost) => {
+                    ghost.scared = true;
+
+                    setTimeout(() => {
+                        ghost.scared = false;
+                    }, 5000)
+                })
             }
             
-            curScore.innerHTML = score;
+            curScore.innerHTML = score; //to update score after eating pellet
         }
+    }
+
+    if (pellets.length === 0) {
+        cancelAnimationFrame(frameId);
+        console.log("You Win!");
     }
 
     boundaries.forEach((boundary) => { //boundaries for the game
@@ -173,53 +198,67 @@ export function animate() {
     ghosts.forEach((ghost) => {
         ghost.update();
 
+        if (collisionCircle({
+            circle: ghost,
+            player: player
+        }) && !ghost.scared) {
+            cancelAnimationFrame(frameId);
+            console.log("You Lose...");
+        } else if (collisionCircle({
+            circle: ghost,
+            player: player
+        }) && ghost.scared) {
+            ghost.position.x = Boundary.width/2 + Boundary.width * 5;
+            ghost.position.y = Boundary.height/2 + Boundary.width * 5;
+            ghost.scared = false;
+            
+            score += 30;
+            curScore.innerHTML = score; //to update score when killing ghosts
+        }
+
         const collisions = [];
         boundaries.forEach((boundary) => {
             //boundary collision w/ ghost
-            if (!collisions.includes("right") &&
-                collisionBoundary ({
-                circle: {...ghost,
-                        velocity: {
-                            x: ghost.speed,
-                            y: 0
-                        }},
-                rectangle: boundary
+            if (collisionGhostWall({
+                array: collisions,
+                dir: "right",
+                ghost: ghost,
+                x: ghost.speed,
+                y: 0,
+                boundary: boundary
             })) {
                 collisions.push("right");
             }
 
-            if (!collisions.includes("left") &&
-                collisionBoundary ({
-                circle: {...ghost,
-                        velocity: {
-                            x: -ghost.speed,
-                            y: 0
-                        }},
-                rectangle: boundary
+            if (collisionGhostWall({
+                array: collisions,
+                dir: "left",
+                ghost: ghost,
+                x: -ghost.speed,
+                y: 0,
+                boundary: boundary
             })) {
                 collisions.push("left");
             }
 
-            if (!collisions.includes("down") &&
-                collisionBoundary ({
-                circle: {...ghost,
-                        velocity: {
-                            x: 0,
-                            y: ghost.speed
-                        }},
-                rectangle: boundary
+            if (collisionGhostWall({
+                array: collisions,
+                dir: "down",
+                ghost: ghost,
+                x: 0,
+                y: ghost.speed,
+                boundary: boundary
             })) {
                 collisions.push("down");
             }
 
-            if (!collisions.includes("up") &&
-                collisionBoundary ({
-                circle: {...ghost,
-                        velocity: {
-                            x: 0,
-                            y: -ghost.speed
-                        }},
-                rectangle: boundary
+            if (collisionGhostWall({
+                array: collisions,
+                dir: "up",
+                ghost: ghost,
+                x: 0,
+                y: -ghost.speed,
+                boundary: boundary
             })) {
                 collisions.push("up");
             }
@@ -272,22 +311,33 @@ export function animate() {
     if (keys.up.pressed && lastKey === 'w') {
         collisionForLoopY({
             x: 0,
-            y: -ghost.speed
+            y: -5
         })
     } else if (keys.left.pressed && lastKey === 'a') {
         collisionForLoopX({
-            x: -ghost.speed,
+            x: -5,
             y: 0,
         })
     } else if (keys.down.pressed && lastKey === 's') {
         collisionForLoopY({
             x: 0,
-            y: ghost.speed
+            y: 5
         })
     } else if (keys.right.pressed && lastKey === 'd') {
         collisionForLoopX({
-            x: ghost.speed,
+            x: 5,
             y: 0
         })
     }
+
+    if (player.velocity.x > 0) {
+        player.rotation = 0;
+    } else if (player.velocity.x < 0) {
+        player.rotation = Math.PI;
+    } else if (player.velocity.y > 0) {
+        player.rotation = Math.PI/2;
+    } else if (player.velocity.y < 0) {
+        player.rotation = Math.PI * 1.5;
+    }
+
 }
